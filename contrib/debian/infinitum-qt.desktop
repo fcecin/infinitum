@@ -1,0 +1,12 @@
+[Desktop Entry]
+Encoding=UTF-8
+Name=Infinitum
+Comment=Infinitum P2P Cryptocurrency
+Comment[fr]=Infinitum, monnaie virtuelle cryptographique pair à pair
+Comment[tr]=Infinitum, eşten eşe kriptografik sanal para birimi
+Exec=infinitum-qt %u
+Terminal=false
+Type=Application
+Icon=infinitum128
+MimeType=x-scheme-handler/infinitum;
+Categories=Office;Finance;

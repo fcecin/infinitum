@@ -1,0 +1,67 @@
+#!/bin/bash
+#
+#  infinitumd The infinitum core server.
+#
+#
+# chkconfig: 345 80 20
+# description: infinitumd
+# processname: infinitumd
+#
+
+# Source function library.
+. /etc/init.d/functions
+
+# you can override defaults in /etc/sysconfig/infinitumd, see below
+if [ -f /etc/sysconfig/infinitumd ]; then
+        . /etc/sysconfig/infinitumd
+fi
+
+RETVAL=0
+
+prog=infinitumd
+# you can override the lockfile via INFINITUMD_LOCKFILE in /etc/sysconfig/infinitumd
+lockfile=${INFINITUMD_LOCKFILE-/var/lock/subsys/infinitumd}
+
+# infinitumd defaults to /usr/bin/infinitumd, override with INFINITUMD_BIN
+infinitumd=${INFINITUMD_BIN-/usr/bin/infinitumd}
+
+# infinitumd opts default to -disablewallet, override with INFINITUMD_OPTS
+infinitumd_opts=${INFINITUMD_OPTS--disablewallet}
+
+start() {
+    echo -n $"Starting $prog: "
+    daemon $DAEMONOPTS $infinitumd $infinitumd_opts
+    RETVAL=$?
+    echo
+    [ $RETVAL -eq 0 ] && touch $lockfile
+    return $RETVAL
+}
+
+stop() {
+    echo -n $"Stopping $prog: "
+    killproc $prog
+    RETVAL=$?
+    echo
+    [ $RETVAL -eq 0 ] && rm -f $lockfile
+    return $RETVAL
+}
+
+case "$1" in
+    start)
+        start
+        ;;
+    stop)
+        stop
+        ;;
+    status)
+        status $prog
+        ;;
+    restart)
+        stop
+        start
+        ;;
+    *)
+        echo "Usage: service $prog {start|stop|status|restart}"
+        exit 1
+        ;;
+esac

@@ -1,0 +1,92 @@
+#!/sbin/runscript
+
+# backward compatibility for existing gentoo layout 
+#
+if [ -d "/var/lib/infinitum/.infinitum" ]; then
+	INFINITUMD_DEFAULT_DATADIR="/var/lib/infinitum/.infinitum"
+else
+	INFINITUMD_DEFAULT_DATADIR="/var/lib/infinitumd"
+fi
+
+INFINITUMD_CONFIGFILE=${INFINITUMD_CONFIGFILE:-/etc/infinitum/infinitum.conf}
+INFINITUMD_PIDDIR=${INFINITUMD_PIDDIR:-/var/run/infinitumd}
+INFINITUMD_PIDFILE=${INFINITUMD_PIDFILE:-${INFINITUMD_PIDDIR}/infinitumd.pid}
+INFINITUMD_DATADIR=${INFINITUMD_DATADIR:-${INFINITUMD_DEFAULT_DATADIR}}
+INFINITUMD_USER=${INFINITUMD_USER:-${INFINITUM_USER:-infinitum}}
+INFINITUMD_GROUP=${INFINITUMD_GROUP:-infinitum}
+INFINITUMD_BIN=${INFINITUMD_BIN:-/usr/bin/infinitumd}
+INFINITUMD_NICE=${INFINITUMD_NICE:-${NICELEVEL:-0}}
+INFINITUMD_OPTS="${INFINITUMD_OPTS:-${INFINITUM_OPTS}}"
+
+name="Infinitum Core Daemon"
+description="Infinitum cryptocurrency P2P network daemon"
+
+command="/usr/bin/infinitumd"
+command_args="-pid=\"${INFINITUMD_PIDFILE}\" \
+		-conf=\"${INFINITUMD_CONFIGFILE}\" \
+		-datadir=\"${INFINITUMD_DATADIR}\" \
+		-daemon \
+		${INFINITUMD_OPTS}"
+
+required_files="${INFINITUMD_CONFIGFILE}"
+start_stop_daemon_args="-u ${INFINITUMD_USER} \
+			-N ${INFINITUMD_NICE} -w 2000"
+pidfile="${INFINITUMD_PIDFILE}"
+
+# The retry schedule to use when stopping the daemon. Could be either
+# a timeout in seconds or multiple signal/timeout pairs (like
+# "SIGKILL/180 SIGTERM/300")
+retry="${INFINITUMD_SIGTERM_TIMEOUT}"
+
+depend() {
+	need localmount net
+}
+
+# verify
+# 1) that the datadir exists and is writable (or create it)
+# 2) that a directory for the pid exists and is writable
+# 3) ownership and permissions on the config file
+start_pre() {
+	checkpath \
+	-d \
+	--mode 0750 \
+	--owner "${INFINITUMD_USER}:${INFINITUMD_GROUP}" \
+	"${INFINITUMD_DATADIR}"
+
+	checkpath \
+	-d \
+	--mode 0755 \
+	--owner "${INFINITUMD_USER}:${INFINITUMD_GROUP}" \
+	"${INFINITUMD_PIDDIR}"
+
+	checkpath -f \
+	-o ${INFINITUMD_USER}:${INFINITUMD_GROUP} \
+	-m 0660 \
+	${INFINITUMD_CONFIGFILE}
+
+	checkconfig || return 1
+}
+
+checkconfig()
+{
+	if ! grep -qs '^rpcpassword=' "${INFINITUMD_CONFIGFILE}" ; then
+		eerror ""
+		eerror "ERROR: You must set a secure rpcpassword to run infinitumd."
+		eerror "The setting must appear in ${INFINITUMD_CONFIGFILE}"
+		eerror ""
+		eerror "This password is security critical to securing wallets "
+		eerror "and must not be the same as the rpcuser setting."
+		eerror "You can generate a suitable random password using the following"
+		eerror "command from the shell:"
+		eerror ""
+		eerror "bash -c 'tr -dc a-zA-Z0-9 < /dev/urandom | head -c32 && echo'"
+		eerror ""
+		eerror "It is also recommended that you also set alertnotify so you are "
+		eerror "notified of problems:"
+		eerror ""
+		eerror "ie: alertnotify=echo %%s | mail -s \"Infinitum Alert\"" \
+			"admin@foo.com"
+		eerror ""
+		return 1
+	fi
+}

@@ -1,0 +1,6 @@
+usr/local/bin/infinitum-qt usr/bin
+share/pixmaps/infinitum32.xpm usr/share/pixmaps
+share/pixmaps/infinitum16.xpm usr/share/pixmaps
+share/pixmaps/infinitum128.png usr/share/pixmaps
+debian/infinitum-qt.desktop usr/share/applications
+debian/infinitum-qt.protocol usr/share/kde4/services/

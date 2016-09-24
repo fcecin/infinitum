@@ -1,0 +1,11 @@
+[Protocol]
+exec=infinitum-qt '%u'
+protocol=infinitum
+input=none
+output=none
+helper=true
+listing=
+reading=false
+writing=false
+makedir=false
+deleting=false

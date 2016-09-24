@@ -1,0 +1,33 @@
+# /etc/conf.d/infinitumd: config file for /etc/init.d/infinitumd
+
+# Config file location
+#INFINITUMD_CONFIGFILE="/etc/infinitum/infinitum.conf"
+
+# What directory to write pidfile to?  (created and owned by $INFINITUMD_USER)
+#INFINITUMD_PIDDIR="/var/run/infinitumd"
+
+# What filename to give the pidfile
+#INFINITUMD_PIDFILE="${INFINITUMD_PIDDIR}/infinitumd.pid"
+
+# Where to write infinitumd data (be mindful that the blockchain is large)
+#INFINITUMD_DATADIR="/var/lib/infinitumd"
+
+# User and group to own infinitumd process
+#INFINITUMD_USER="infinitum"
+#INFINITUMD_GROUP="infinitum"
+
+# Path to infinitumd executable
+#INFINITUMD_BIN="/usr/bin/infinitumd"
+
+# Nice value to run infinitumd under
+#INFINITUMD_NICE=0
+
+# Additional options (avoid -conf and -datadir, use flags above)
+INFINITUMD_OPTS="-disablewallet"
+
+# The timeout in seconds OpenRC will wait for infinitumd to terminate
+# after a SIGTERM has been raised.
+# Note that this will be mapped as argument to start-stop-daemon's
+# '--retry' option, which means you can specify a retry schedule
+# here. For more information see man 8 start-stop-daemon.
+INFINITUMD_SIGTERM_TIMEOUT=60

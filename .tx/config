@@ -1,0 +1,7 @@
+[main]
+host = https://www.transifex.com
+
+[infinitum.qt-translation-013x]
+file_filter = src/qt/locale/infinitum_<lang>.ts
+source_file = src/qt/locale/infinitum_en.ts
+source_lang = en
