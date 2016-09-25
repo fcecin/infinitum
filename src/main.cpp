@@ -1691,17 +1691,16 @@ bool ReadBlockFromDisk(CBlock& block, const CBlockIndex* pindex, const Consensus
     return true;
 }
 
-CAmount GetBlockSubsidy(int nHeight, const Consensus::Params& consensusParams)
-{
-    int halvings = nHeight / consensusParams.nSubsidyHalvingInterval;
-    // Force block reward to zero when right shift is undefined.
-    if (halvings >= 64)
-        return 0;
 
-    CAmount nSubsidy = 50 * COIN;
-    // Subsidy is cut in half every 210,000 blocks which will occur approximately every 4 years.
-    nSubsidy >>= halvings;
-    return nSubsidy;
+// Infinitum:: reward of a block is 16 satoshis (">>4") per difficulty of that block
+CAmount GetBlockSubsidy(unsigned int nBits, int nHeight, const Consensus::Params& consensusParams)
+{
+  arith_uint256 nTarget, nMaximumTarget;
+  nTarget.SetCompact(nBits);
+  nMaximumTarget.SetCompact(0x1d00ffff);
+  arith_uint256 nDiffSatoshis = nMaximumTarget / (nTarget >> 4);
+  CAmount nSubsidy = nDiffSatoshis.GetLow64();
+  return nSubsidy;
 }
 
 bool IsInitialBlockDownload()
@@ -2482,7 +2481,8 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
     int64_t nTime3 = GetTimeMicros(); nTimeConnect += nTime3 - nTime2;
     LogPrint("bench", "      - Connect %u transactions: %.2fms (%.3fms/tx, %.3fms/txin) [%.2fs]\n", (unsigned)block.vtx.size(), 0.001 * (nTime3 - nTime2), 0.001 * (nTime3 - nTime2) / block.vtx.size(), nInputs <= 1 ? 0 : 0.001 * (nTime3 - nTime2) / (nInputs-1), nTimeConnect * 0.000001);
 
-    CAmount blockReward = nFees + GetBlockSubsidy(pindex->nHeight, chainparams.GetConsensus());
+    // Infinitum:: Block subsidy is a function of block difficulty (nBits)
+    CAmount blockReward = nFees + GetBlockSubsidy(pindex->nBits, pindex->nHeight, chainparams.GetConsensus());
     if (block.vtx[0].GetValueOut() > blockReward)
         return state.DoS(100,
                          error("ConnectBlock(): coinbase pays too much (actual=%d vs limit=%d)",

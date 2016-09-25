@@ -7,6 +7,7 @@ src/infinitum-cli
 src/infinitum-tx
 src/test/test_infinitum
 src/qt/test/test_infinitum-qt
+src/bench/bench_infinitum
 
 # autoreconf
 Makefile.in

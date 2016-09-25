@@ -479,23 +479,26 @@ std::string HelpMessage(HelpMessageMode mode)
 
 std::string LicenseInfo()
 {
-    const std::string URL_SOURCE_CODE = "<https://github.com/infinitum/infinitum>";
-    const std::string URL_WEBSITE = "<https://infinitumcore.org>";
+  //const std::string URL_SOURCE_CODE = "<https://github.com/infinitum/infinitum>";
+  //const std::string URL_WEBSITE = "<https://infinitumcore.org>";
     // todo: remove urls from translations on next change
     return CopyrightHolders(strprintf(_("Copyright (C) %i-%i"), 2009, COPYRIGHT_YEAR) + " ") + "\n" +
            "\n" +
-           strprintf(_("Please contribute if you find %s useful. "
-                       "Visit %s for further information about the software."),
-               PACKAGE_NAME, URL_WEBSITE) +
-           "\n" +
-           strprintf(_("The source code is available from %s."),
-               URL_SOURCE_CODE) +
+      //strprintf(_("Please contribute if you find %s useful. "
+      //                 "Visit %s for further information about the software."),
+      //         PACKAGE_NAME, URL_WEBSITE) +
+      //     "\n" +
+      //     strprintf(_("The source code is available from %s."),
+      //         URL_SOURCE_CODE) +
            "\n" +
            "\n" +
            _("This is experimental software.") + "\n" +
            _("Distributed under the MIT software license, see the accompanying file COPYING or <http://www.opensource.org/licenses/mit-license.php>.") + "\n" +
            "\n" +
            _("This product includes software developed by the OpenSSL Project for use in the OpenSSL Toolkit <https://www.openssl.org/> and cryptographic software written by Eric Young and UPnP software written by Thomas Bernard.") +
+           "\n" +
+           "\n" +
+           _("The GetNextWorkRequired() code is based on the original difficulty retargeting algorithm developed by the BasicCoin project <https://github.com/zack-bitcoin/basiccoin/> and on the difficulty adjustment limits concept from the DigiByte Core project <https://digibyte.co/>.") +
            "\n";
 }
 

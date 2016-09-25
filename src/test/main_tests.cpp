@@ -12,6 +12,8 @@
 
 BOOST_FIXTURE_TEST_SUITE(main_tests, TestingSetup)
 
+// Infinitum:: removed block subsidy tests (infinitum doesn't 'halve')
+/*
 static void TestBlockSubsidyHalvings(const Consensus::Params& consensusParams)
 {
     int maxHalvings = 64;
@@ -55,6 +57,7 @@ BOOST_AUTO_TEST_CASE(subsidy_limit_test)
     }
     BOOST_CHECK_EQUAL(nSum, 2099999997690000ULL);
 }
+*/
 
 bool ReturnFalse() { return false; }
 bool ReturnTrue() { return true; }
