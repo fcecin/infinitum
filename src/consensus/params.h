@@ -59,8 +59,10 @@ struct Params {
     bool fPowAllowMinDifficultyBlocks;
     bool fPowNoRetargeting;
     int64_t nPowTargetSpacing;
-    int64_t nPowTargetTimespan;
-    int64_t DifficultyAdjustmentInterval() const { return nPowTargetTimespan / nPowTargetSpacing; }
+
+    // Infinitum:: additional difficulty retarget params
+    int64_t nMaxAdjustUp;
+    int64_t nMaxAdjustDown;  
 };
 } // namespace Consensus
 
