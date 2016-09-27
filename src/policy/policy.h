@@ -14,6 +14,9 @@
 
 class CCoinsViewCache;
 
+// Infinitum:: default prune-dust vote, between 0 and 255, to insert in newly minted blocks in the miner
+static const unsigned int DEFAULT_PRUNE_DUST_VOTE = 0;
+
 /** Default for -blockmaxsize, which controls the maximum size of block the mining code will create **/
 static const unsigned int DEFAULT_BLOCK_MAX_SIZE = 750000;
 /** Default for -blockprioritysize, maximum space for zero/low-fee transactions **/

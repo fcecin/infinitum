@@ -141,11 +141,22 @@ CBlockTemplate* BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn)
     CBlockIndex* pindexPrev = chainActive.Tip();
     nHeight = pindexPrev->nHeight + 1;
 
-    pblock->nVersion = ComputeBlockVersion(pindexPrev, chainparams.GetConsensus());
+    // Infinitum:: set the prune-dust vote byte [0..255]
+    unsigned int nPruneDustVote = GetArg("-prunedust", DEFAULT_PRUNE_DUST_VOTE) & 0xFF;
+
+    // Infinitum:: new blockversion stuff since we killed versionbits
+    //pblock->nVersion = ComputeBlockVersion(pindexPrev, chainparams.GetConsensus());
+    pblock->nVersion = INFINITUM_BLOCK_VERSION;
+      
     // -regtest only: allow overriding block.nVersion with
     // -blockversion=N to test forking scenarios
     if (chainparams.MineBlocksOnDemand())
         pblock->nVersion = GetArg("-blockversion", pblock->nVersion);
+
+    // Infinitum:: FIXME/TODO: use the higher 16 bits of nVersion for a timestamp extension
+    // Infinitum:: append the prune-dust vote option
+    pblock->nVersion &= 0xFF;
+    pblock->nVersion |= (nPruneDustVote << 8);
 
     pblock->nTime = GetAdjustedTime();
     const int64_t nMedianTimePast = pindexPrev->GetMedianTimePast();

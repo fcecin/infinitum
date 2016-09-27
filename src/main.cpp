@@ -2246,27 +2246,7 @@ void ThreadScriptCheck() {
 // Protected by cs_main
 VersionBitsCache versionbitscache;
 
-int32_t ComputeBlockVersion(const CBlockIndex* pindexPrev, const Consensus::Params& params)
-{
-    // Infinitum:: FIXME/TODO: set dust-vote and the extra time-stamp
-
-    // Infinitum:: Versionbits=NOP
-    return INFINITUM_BLOCK_VERSION & 0xFF;
-  
-    LOCK(cs_main);
-    int32_t nVersion = VERSIONBITS_TOP_BITS;
-
-    for (int i = 0; i < (int)Consensus::MAX_VERSION_BITS_DEPLOYMENTS; i++) {
-        ThresholdState state = VersionBitsState(pindexPrev, params, (Consensus::DeploymentPos)i, versionbitscache);
-        if (state == THRESHOLD_LOCKED_IN || state == THRESHOLD_STARTED) {
-            nVersion |= VersionBitsMask(params, (Consensus::DeploymentPos)i);
-        }
-    }
-
-    return nVersion;
-}
-
-// Infinitum:: Versionbits=NOP
+// Infinitum:: Versionbits=NOP REMOVEME
 /**
  * Threshold condition checker that triggers when unknown versionbits are seen on the network.
  
