@@ -23,6 +23,9 @@ const struct BIP9DeploymentInfo VersionBitsDeploymentInfo[Consensus::MAX_VERSION
 
 ThresholdState AbstractThresholdConditionChecker::GetStateFor(const CBlockIndex* pindexPrev, const Consensus::Params& params, ThresholdConditionCache& cache) const
 {
+    // Infinitum:: Versionbits=NOP; every "deployment" is an insta-hard-fork from day 0. Only block version number counts. REMOVEME
+    return THRESHOLD_ACTIVE;
+
     int nPeriod = Period(params);
     int nThreshold = Threshold(params);
     int64_t nTimeStart = BeginTime(params);
