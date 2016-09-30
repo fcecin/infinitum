@@ -409,7 +409,20 @@ class CChain {
 private:
     std::vector<CBlockIndex*> vChain;
 
+    // Infinitum:: Cache of the minimum spendable output values for every
+    //   completed chain cycle. The value for a cycle is the highest "prune
+    //   dust" vote left after 95% of the highest vote values are discarded.
+    std::vector<CAmount> vMinSpendableOutputValues;
+
 public:
+
+    // Infinitum:: Get the minimum value an output of given height (of the block
+    //  the transaction of this output ORIGINALLY appeared in this chain) has to
+    //  have to be spendable in a given "next block" height at this chain (i.e.
+    //  this->height()+1), aka the block that would want to have the input for
+    //  that output.
+    CAmount GetMinSpendableOutputValue(uint64_t nOutputBlockHeight, uint64_t nInputBlockHeight) const;
+
     /** Returns the index entry for the genesis block of this chain, or NULL if none. */
     CBlockIndex *Genesis() const {
         return vChain.size() > 0 ? vChain[0] : NULL;

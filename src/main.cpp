@@ -1289,6 +1289,21 @@ bool AcceptToMemoryPoolWorker(CTxMemPool& pool, CValidationState& state, const C
             }
         }
 
+        // Infinitum:: Apply the dust and inactivity pruning rules.
+        bool fDustPruned;
+        if (IsSpendingPrunedInputs(view, tx, GetHeight(), fDustPruned)) {
+            if (fDustPruned)
+                return state.DoS(10, false,
+                                 REJECT_INVALID, "bad-txns-inputs-pruned-dust", false,
+                                 strprintf("%s spends a dust-pruned transaction output",
+                                           hash.ToString()));
+            else
+                return state.DoS(10, false,
+                                 REJECT_INVALID, "bad-txns-inputs-pruned-expired", false,
+                                 strprintf("%s spends an inactivity-pruned transaction output",
+                                           hash.ToString()));
+        }
+
         CTxMemPoolEntry entry(tx, nFees, GetTime(), dPriority, chainActive.Height(), pool.HasNoInputsOf(tx), inChainInputValue, fSpendsCoinbase, nSigOpsCost, lp);
         unsigned int nSize = entry.GetTxSize();
 
@@ -2457,6 +2472,17 @@ bool ConnectBlock(const CBlock& block, CValidationState& state, CBlockIndex* pin
 
         if (!tx.IsCoinBase())
         {
+            // Infinitum:: Apply the dust and inactivity pruning rules.
+            bool fDustPruned;
+            if (IsSpendingPrunedInputs(view, tx, pindex->nHeight, fDustPruned)) {
+                if (fDustPruned)
+                    return state.DoS(100, error("ConnectBlock(): dust-pruned inputs detected"),
+                                     REJECT_INVALID, "bad-txns-inputs-pruned-dust");
+                else
+                    return state.DoS(100, error("ConnectBlock(): inactivity-pruned inputs detected"),
+                                     REJECT_INVALID, "bad-txns-inputs-pruned-expired");
+            }
+
             nFees += view.GetValueIn(tx)-tx.GetValueOut();
 
             std::vector<CScriptCheck> vChecks;

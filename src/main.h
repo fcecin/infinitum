@@ -17,6 +17,7 @@
 #include "script/script_error.h"
 #include "sync.h"
 #include "versionbits.h"
+#include "infinitum.h"
 
 #include <algorithm>
 #include <exception>

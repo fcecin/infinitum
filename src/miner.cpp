@@ -74,7 +74,7 @@ int64_t UpdateTime(CBlockHeader* pblock, const Consensus::Params& consensusParam
 }
 
 BlockAssembler::BlockAssembler(const CChainParams& _chainparams)
-    : chainparams(_chainparams)
+  : chainparams(_chainparams), view(NULL)
 {
     // Block resource limits
     // If neither -blockmaxsize or -blockmaxweight is given, limit to DEFAULT_BLOCK_MAX_*
@@ -173,8 +173,15 @@ CBlockTemplate* BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn)
     // transaction (which in most cases can be a no-op).
     fIncludeWitness = IsWitnessEnabled(pindexPrev, chainparams.GetConsensus());
 
+    // Infinitum:: we need a CCoinsViewCache to check for spending of pruned dust inputs
+    view = new CCoinsViewCache(pcoinsTip);
+
     addPriorityTxs();
     addPackageTxs();
+
+    // Infinitum:: ...and here we get rid of it.
+    delete view;
+    view = NULL;
 
     nLastBlockTx = nBlockTx;
     nLastBlockSize = nBlockSize;
@@ -258,6 +265,11 @@ bool BlockAssembler::TestPackageTransactions(const CTxMemPool::setEntries& packa
             return false;
         if (!fIncludeWitness && !it->GetTx().wit.IsNull())
             return false;
+
+        // Infinitum:: don't add tx if it spends pruned inputs at this block height
+        if (IsSpendingPrunedInputs(it))
+           return false;
+
         if (fNeedSizeAccounting) {
             uint64_t nTxSize = ::GetSerializeSize(it->GetTx(), SER_NETWORK, PROTOCOL_VERSION);
             if (nPotentialBlockSize + nTxSize >= nBlockMaxSize) {
@@ -318,7 +330,17 @@ bool BlockAssembler::TestForBlock(CTxMemPool::txiter iter)
     if (!IsFinalTx(iter->GetTx(), nHeight, nLockTimeCutoff))
         return false;
 
+    // Infinitum:: don't add tx if it spends pruned inputs at this block height
+    if (IsSpendingPrunedInputs(iter))
+      return false;
+
     return true;
+}
+
+bool BlockAssembler::IsSpendingPrunedInputs(CTxMemPool::txiter iter)
+{
+    bool fDummy;
+    return ::IsSpendingPrunedInputs((const CCoinsViewCache &)(*view), iter->GetTx(), nHeight, fDummy);
 }
 
 void BlockAssembler::AddToBlock(CTxMemPool::txiter iter)

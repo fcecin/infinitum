@@ -3,22 +3,112 @@
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
+#include "infinitum.h"
 #include "chain.h"
+
+#include <boost/foreach.hpp>
 
 using namespace std;
 
 /**
  * CChain implementation
  */
+CAmount CChain::GetMinSpendableOutputValue(uint64_t nOutputBlockHeight, uint64_t nInputBlockHeight) const {
+    // Example: Start 0, End 2. The transaction with the UTXO is somewhere inside Cycle 0,
+    //  and the transaction that is trying to spend it is somewhere inside Cycle 2.
+    // We have to check then what the dust vote result was at the end of Cycle 0 (vmin[0]),
+    //  and then what the result was at the end of Cycle 1 (vmin[1]), which are the cycle
+    //  borders that are crossed between the middle of Cycle 0 and the middle of Cycle 2.
+
+    int nStartCycle = GetCycle(nOutputBlockHeight);
+    int nEndCycle = GetCycle(nInputBlockHeight);
+
+    CAmount nMaximumFound = 0; // The highest prune threshold crossed is the one that we apply.
+    for (int nCycle = nStartCycle; nCycle < nEndCycle; ++nCycle)
+	nMaximumFound = std::max(nMaximumFound, vMinSpendableOutputValues[nCycle]);
+    return nMaximumFound;
+}
+
+// Infinitum:: new CChain::SetTip that updates vMinSpendableOutputValues as well as the vChain
 void CChain::SetTip(CBlockIndex *pindex) {
     if (pindex == NULL) {
         vChain.clear();
+        vMinSpendableOutputValues.clear(); // Infinitum:: update vMinSpendableOutputValues
         return;
     }
-    vChain.resize(pindex->nHeight + 1);
+
+    // Height ints:
+    // -1 = no genesis block
+    //  0 = just the genesis block (block at height #0)
+    int nNewChainHeight = pindex->nHeight;
+    int nFirstCommonNodeHeight = nNewChainHeight;
+
+    vChain.resize(nNewChainHeight + 1);
     while (pindex && vChain[pindex->nHeight] != pindex) {
         vChain[pindex->nHeight] = pindex;
         pindex = pindex->pprev;
+	--nFirstCommonNodeHeight;
+    }
+
+    // From first common height to new height, the vminspendableoutputvalues need recomputing.
+    // The interval touched by the first common height + 1 (changed block) is the first interval
+    //   to recompute.
+    int nStartCycle = GetCycle(nFirstCommonNodeHeight + 1);
+    if (nStartCycle < 0)
+        nStartCycle = 0; // The genesis block ("Cycle #-1") doesn't matter, we never "start" at it.
+
+    // The end cycle is the first *whole* cycle given by the new chain height.
+    // If the end cycle is less than the start cycle, then the spendable output values array
+    //   is empty.
+    // End cycle can be -1 if there is no end cycle, which resizes the vminspend vector to 0.
+    int nEndCycle = GetCycle(nNewChainHeight);
+    if (nNewChainHeight % INFINITUM_CHAIN_CYCLE_BLOCKS != 0)
+        --nEndCycle; // New height block doesn't land squarely at the end of its cycle:
+                     //   that cycle isn't whole so it doesn't apply any dust pruning yet.
+
+    // Cycles past the end are deleted
+    if (nEndCycle < -1)
+        nEndCycle = -1; // So we don't resize(-1). It happens when pushing the genesis in.
+    vMinSpendableOutputValues.resize(nEndCycle + 1); // Cycle #0 is the first one, so +1 to fit it in
+
+    // Cycles from start to end are recomputed/re-tallied.
+    // nEndCycle is less than nStartCycle for most of the calls to this method, in which
+    //   case this loop doesn't run (i.e. nothing to update)
+    for (int nCycle = nStartCycle; nCycle <= nEndCycle; ++nCycle) {
+
+        // Element 0 = ndustvote 0's count; element 1 = ndustvote 1's count etc.
+	std::vector<int> vVoteCounts;
+	vVoteCounts.resize(256);
+
+	int64_t nFirstHeight = 1 + (nCycle * INFINITUM_CHAIN_CYCLE_BLOCKS);
+	int64_t nLastHeight = (nCycle + 1) * INFINITUM_CHAIN_CYCLE_BLOCKS;
+
+	// Tally votes
+	for (int i = nFirstHeight; i <= nLastHeight; ++i) {
+	    int nVote = (vChain[i]->nVersion >> 8) & 0xFF;
+	    ++vVoteCounts[nVote];
+	}
+
+	// Compute the winning vote
+	CAmount nWinningVote = 0;
+
+	// Will discard the lowest 5% votes and keep whatever the next vote is,
+	//   so the dust value is the lowest common denominator among the 95% of miners
+	//   that are on the side of wanting the highest dust value.
+	int nDiscardBudget = INFINITUM_CHAIN_CYCLE_BLOCKS / 20;
+	int nIndex = 0;
+	BOOST_FOREACH(int nVoteCount, vVoteCounts) {
+	  nDiscardBudget -= nVoteCount;
+	  if (nDiscardBudget < 0) {
+            // Votes for "0" say dust is 2^0, votes for "1" say dust is 2^1, etc.
+	    nWinningVote = 1 << nIndex;
+	    break;
+	  }
+	  ++nIndex;
+	}
+
+	// Update it
+	vMinSpendableOutputValues[nCycle] = nWinningVote;
     }
 }
 

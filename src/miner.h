@@ -161,6 +161,9 @@ private:
     int lastFewTxs;
     bool blockFinished;
 
+    // Infinitum:: we need a coins cache view for checking spending of pruned inputs.
+    CCoinsViewCache *view;
+
 public:
     BlockAssembler(const CChainParams& chainparams);
     /** Construct a new block template with coinbase to scriptPubKeyIn */
@@ -178,6 +181,12 @@ private:
     void addPriorityTxs();
     /** Add transactions based on feerate including unconfirmed ancestors */
     void addPackageTxs();
+
+    // Infinitum:: this checks whether a transaction is spending pruned inputs,
+    //  relative to the target height of the block being assembled, in which
+    //  case it cannot go into that block as it would make it invalid (the
+    //  transaction is invalid in that block height).
+    bool IsSpendingPrunedInputs(CTxMemPool::txiter iter);
 
     // helper function for addPriorityTxs
     /** Test if tx will still "fit" in the block */

@@ -96,6 +96,7 @@ INFINITUM_CORE_H = \
   httpserver.h \
   indirectmap.h \
   init.h \
+  infinitum.h \
   key.h \
   keystore.h \
   dbwrapper.h \
@@ -170,6 +171,7 @@ libinfinitum_server_a_SOURCES = \
   httprpc.cpp \
   httpserver.cpp \
   init.cpp \
+  infinitum.cpp \
   dbwrapper.cpp \
   main.cpp \
   merkleblock.cpp \
