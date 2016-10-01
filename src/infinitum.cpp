@@ -46,3 +46,13 @@ bool IsSpendingPrunedInputs(const CCoinsViewCache &view, const CTransaction &tx,
     }
     return false;
 }
+
+bool IsOutputPruned(const CAmount nOutputAmount, uint64_t nOutputHeight)
+{
+    uint64_t nInputHeight = chainActive.Height() + 1; // any new block
+    if (TooManyCyclesBetween(nOutputHeight, nInputHeight))
+        return true;
+    if (chainActive.GetMinSpendableOutputValue(nOutputHeight, nInputHeight) > nOutputAmount)
+        return true;
+    return false;
+}

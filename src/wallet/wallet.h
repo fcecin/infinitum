@@ -202,6 +202,10 @@ public:
 
     int SetMerkleBranch(const CBlock& block);
 
+    // Infinitum:: return the height of this transaction in the active
+    //   chain or, if it can't find it for whatever reason, the tip height.
+    uint64_t GetHeightInMainChainOrTipHeight() const;
+
     /**
      * Return depth of transaction in blockchain:
      * <0  : conflicts with a transaction this deep in the blockchain
@@ -792,15 +796,18 @@ public:
     isminetype IsMine(const CTxIn& txin) const;
     CAmount GetDebit(const CTxIn& txin, const isminefilter& filter) const;
     isminetype IsMine(const CTxOut& txout) const;
-    CAmount GetCredit(const CTxOut& txout, const isminefilter& filter) const;
     bool IsChange(const CTxOut& txout) const;
-    CAmount GetChange(const CTxOut& txout) const;
     bool IsMine(const CTransaction& tx) const;
     /** should probably be renamed to IsRelevantToMe */
     bool IsFromMe(const CTransaction& tx) const;
     CAmount GetDebit(const CTransaction& tx, const isminefilter& filter) const;
-    CAmount GetCredit(const CTransaction& tx, const isminefilter& filter) const;
-    CAmount GetChange(const CTransaction& tx) const;
+
+    // Infinitum:: our txout values are sensitive to block height (nCoinHeight)
+    CAmount GetCredit(const CTxOut& txout, uint64_t nCoinHeight, const isminefilter& filter) const;
+    CAmount GetChange(const CTxOut& txout, uint64_t nCoinHeight) const;
+    CAmount GetCredit(const CTransaction& tx, uint64_t nCoinHeight, const isminefilter& filter) const;
+    CAmount GetChange(const CTransaction& tx, uint64_t nCoinHeight) const;
+    
     void SetBestChain(const CBlockLocator& loc);
 
     DBErrors LoadWallet(bool& fFirstRunRet);

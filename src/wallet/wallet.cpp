@@ -1053,7 +1053,6 @@ void CWallet::SyncTransaction(const CTransaction& tx, const CBlockIndex *pindex,
     }
 }
 
-
 isminetype CWallet::IsMine(const CTxIn &txin) const
 {
     {
@@ -1090,11 +1089,16 @@ isminetype CWallet::IsMine(const CTxOut& txout) const
     return ::IsMine(*this, txout.scriptPubKey);
 }
 
-CAmount CWallet::GetCredit(const CTxOut& txout, const isminefilter& filter) const
+CAmount CWallet::GetCredit(const CTxOut& txout, uint64_t nCoinHeight, const isminefilter& filter) const
 {
     if (!MoneyRange(txout.nValue))
         throw std::runtime_error("CWallet::GetCredit(): value out of range");
-    return ((IsMine(txout) & filter) ? txout.nValue : 0);
+    CAmount nVal = ((IsMine(txout) & filter) ? txout.nValue : 0);
+
+    // Infinitum:: zero value from a txout that cannot be spent at the given height
+    if (nVal > 0 && nCoinHeight != 0xFFFFFFFFFFFFFFFF && IsOutputPruned(txout.nValue, nCoinHeight))
+        return 0;
+    return nVal;    
 }
 
 bool CWallet::IsChange(const CTxOut& txout) const
@@ -1119,11 +1123,16 @@ bool CWallet::IsChange(const CTxOut& txout) const
     return false;
 }
 
-CAmount CWallet::GetChange(const CTxOut& txout) const
+CAmount CWallet::GetChange(const CTxOut& txout, uint64_t nCoinHeight) const
 {
     if (!MoneyRange(txout.nValue))
         throw std::runtime_error("CWallet::GetChange(): value out of range");
-    return (IsChange(txout) ? txout.nValue : 0);
+
+    // Infinitum:: zero value from a txout that cannot be spent at the given height
+    CAmount nVal = (IsChange(txout) ? txout.nValue : 0);
+    if (nVal > 0 && nCoinHeight != 0xFFFFFFFFFFFFFFFF && IsOutputPruned(txout.nValue, nCoinHeight))
+        return 0;
+    return nVal;    
 }
 
 bool CWallet::IsMine(const CTransaction& tx) const
@@ -1151,24 +1160,24 @@ CAmount CWallet::GetDebit(const CTransaction& tx, const isminefilter& filter) co
     return nDebit;
 }
 
-CAmount CWallet::GetCredit(const CTransaction& tx, const isminefilter& filter) const
+CAmount CWallet::GetCredit(const CTransaction& tx, uint64_t nCoinHeight, const isminefilter& filter) const
 {
     CAmount nCredit = 0;
     BOOST_FOREACH(const CTxOut& txout, tx.vout)
     {
-        nCredit += GetCredit(txout, filter);
+        nCredit += GetCredit(txout, nCoinHeight, filter);
         if (!MoneyRange(nCredit))
             throw std::runtime_error("CWallet::GetCredit(): value out of range");
     }
     return nCredit;
 }
 
-CAmount CWallet::GetChange(const CTransaction& tx) const
+CAmount CWallet::GetChange(const CTransaction& tx, uint64_t nCoinHeight) const
 {
     CAmount nChange = 0;
     BOOST_FOREACH(const CTxOut& txout, tx.vout)
     {
-        nChange += GetChange(txout);
+        nChange += GetChange(txout, nCoinHeight);
         if (!MoneyRange(nChange))
             throw std::runtime_error("CWallet::GetChange(): value out of range");
     }
@@ -1293,6 +1302,8 @@ void CWalletTx::GetAmounts(list<COutputEntry>& listReceived,
         nFee = nDebit - nValueOut;
     }
 
+    uint64_t nCoinHeight = GetHeightInMainChainOrTipHeight();
+
     // Sent/received.
     for (unsigned int i = 0; i < vout.size(); ++i)
     {
@@ -1319,6 +1330,10 @@ void CWalletTx::GetAmounts(list<COutputEntry>& listReceived,
                      this->GetHash().ToString());
             address = CNoDestination();
         }
+
+	// Infinitum:: outputs that have been pruned don't exist.
+	if (IsOutputPruned(txout.nValue, nCoinHeight))
+	    continue;
 
         COutputEntry output = {address, txout.nValue, (int)i};
 
@@ -1509,6 +1524,10 @@ CAmount CWalletTx::GetCredit(const isminefilter& filter) const
     if (IsCoinBase() && GetBlocksToMaturity() > 0)
         return 0;
 
+    // Infinitum:: turn off the cache (FIXME/REVIEW: do we really need to kill it?)
+    fCreditCached = false;
+    fWatchCreditCached = false;
+
     int64_t credit = 0;
     if (filter & ISMINE_SPENDABLE)
     {
@@ -1517,7 +1536,7 @@ CAmount CWalletTx::GetCredit(const isminefilter& filter) const
             credit += nCreditCached;
         else
         {
-            nCreditCached = pwallet->GetCredit(*this, ISMINE_SPENDABLE);
+            nCreditCached = pwallet->GetCredit(*this, GetHeightInMainChainOrTipHeight(), ISMINE_SPENDABLE);
             fCreditCached = true;
             credit += nCreditCached;
         }
@@ -1528,7 +1547,7 @@ CAmount CWalletTx::GetCredit(const isminefilter& filter) const
             credit += nWatchCreditCached;
         else
         {
-            nWatchCreditCached = pwallet->GetCredit(*this, ISMINE_WATCH_ONLY);
+            nWatchCreditCached = pwallet->GetCredit(*this, GetHeightInMainChainOrTipHeight(), ISMINE_WATCH_ONLY);
             fWatchCreditCached = true;
             credit += nWatchCreditCached;
         }
@@ -1540,9 +1559,12 @@ CAmount CWalletTx::GetImmatureCredit(bool fUseCache) const
 {
     if (IsCoinBase() && GetBlocksToMaturity() > 0 && IsInMainChain())
     {
+        // Infinitum:: turn off the cache
+        fImmatureCreditCached = false;
+
         if (fUseCache && fImmatureCreditCached)
             return nImmatureCreditCached;
-        nImmatureCreditCached = pwallet->GetCredit(*this, ISMINE_SPENDABLE);
+        nImmatureCreditCached = pwallet->GetCredit(*this, GetHeightInMainChainOrTipHeight(), ISMINE_SPENDABLE);
         fImmatureCreditCached = true;
         return nImmatureCreditCached;
     }
@@ -1559,8 +1581,13 @@ CAmount CWalletTx::GetAvailableCredit(bool fUseCache) const
     if (IsCoinBase() && GetBlocksToMaturity() > 0)
         return 0;
 
+    // Infinitum:: turn off the cache
+    fAvailableCreditCached = false;
+
     if (fUseCache && fAvailableCreditCached)
         return nAvailableCreditCached;
+
+    uint64_t nCoinHeight = GetHeightInMainChainOrTipHeight();    
 
     CAmount nCredit = 0;
     uint256 hashTx = GetHash();
@@ -1569,7 +1596,7 @@ CAmount CWalletTx::GetAvailableCredit(bool fUseCache) const
         if (!pwallet->IsSpent(hashTx, i))
         {
             const CTxOut &txout = vout[i];
-            nCredit += pwallet->GetCredit(txout, ISMINE_SPENDABLE);
+            nCredit += pwallet->GetCredit(txout, nCoinHeight, ISMINE_SPENDABLE);
             if (!MoneyRange(nCredit))
                 throw std::runtime_error("CWalletTx::GetAvailableCredit() : value out of range");
         }
@@ -1584,9 +1611,12 @@ CAmount CWalletTx::GetImmatureWatchOnlyCredit(const bool& fUseCache) const
 {
     if (IsCoinBase() && GetBlocksToMaturity() > 0 && IsInMainChain())
     {
+        // Infinitum:: turn off the cache
+        fImmatureWatchCreditCached = false;
+
         if (fUseCache && fImmatureWatchCreditCached)
             return nImmatureWatchCreditCached;
-        nImmatureWatchCreditCached = pwallet->GetCredit(*this, ISMINE_WATCH_ONLY);
+        nImmatureWatchCreditCached = pwallet->GetCredit(*this, GetHeightInMainChainOrTipHeight(), ISMINE_WATCH_ONLY);
         fImmatureWatchCreditCached = true;
         return nImmatureWatchCreditCached;
     }
@@ -1603,8 +1633,13 @@ CAmount CWalletTx::GetAvailableWatchOnlyCredit(const bool& fUseCache) const
     if (IsCoinBase() && GetBlocksToMaturity() > 0)
         return 0;
 
+    // Infinitum:: turn off the cache
+    fAvailableWatchCreditCached = false;
+
     if (fUseCache && fAvailableWatchCreditCached)
         return nAvailableWatchCreditCached;
+
+    uint64_t nCoinHeight = GetHeightInMainChainOrTipHeight();
 
     CAmount nCredit = 0;
     for (unsigned int i = 0; i < vout.size(); i++)
@@ -1612,7 +1647,7 @@ CAmount CWalletTx::GetAvailableWatchOnlyCredit(const bool& fUseCache) const
         if (!pwallet->IsSpent(GetHash(), i))
         {
             const CTxOut &txout = vout[i];
-            nCredit += pwallet->GetCredit(txout, ISMINE_WATCH_ONLY);
+            nCredit += pwallet->GetCredit(txout, nCoinHeight, ISMINE_WATCH_ONLY);
             if (!MoneyRange(nCredit))
                 throw std::runtime_error("CWalletTx::GetAvailableCredit() : value out of range");
         }
@@ -1625,9 +1660,12 @@ CAmount CWalletTx::GetAvailableWatchOnlyCredit(const bool& fUseCache) const
 
 CAmount CWalletTx::GetChange() const
 {
+    // Infinitum:: turn off the cache
+    fChangeCached = false;
+
     if (fChangeCached)
         return nChangeCached;
-    nChangeCached = pwallet->GetChange(*this);
+    nChangeCached = pwallet->GetChange(*this, GetHeightInMainChainOrTipHeight());
     fChangeCached = true;
     return nChangeCached;
 }
@@ -1858,11 +1896,25 @@ void CWallet::AvailableCoins(vector<COutput>& vCoins, bool fOnlyConfirmed, const
             if (nDepth == 0 && !pcoin->InMempool())
                 continue;
 
+	    int nCoinHeight = pcoin->GetHeightInMainChainOrTipHeight();
+
             for (unsigned int i = 0; i < pcoin->vout.size(); i++) {
                 isminetype mine = IsMine(pcoin->vout[i]);
-                if (!(IsSpent(wtxid, i)) && mine != ISMINE_NO &&
-                    !IsLockedCoin((*it).first, i) && (pcoin->vout[i].nValue > 0 || fIncludeZeroValue) &&
-                    (!coinControl || !coinControl->HasSelected() || coinControl->fAllowOtherInputs || coinControl->IsSelected(COutPoint((*it).first, i))))
+                if (
+		    !(IsSpent(wtxid, i))
+		    && mine != ISMINE_NO
+		    && !IsLockedCoin((*it).first, i)
+		    && (pcoin->vout[i].nValue > 0 || fIncludeZeroValue)
+		    && (
+			!coinControl
+			|| !coinControl->HasSelected()
+			|| coinControl->fAllowOtherInputs
+			|| coinControl->IsSelected(COutPoint((*it).first, i))
+		       )
+
+		    // Infinitum:: output is unavailable if it is pruned for inactivity or dust
+		    && (!IsOutputPruned(pcoin->vout[i].nValue, nCoinHeight))
+		    )
                         vCoins.push_back(COutput(pcoin, i, nDepth,
                                                  ((mine & ISMINE_SPENDABLE) != ISMINE_NO) ||
                                                   (coinControl && coinControl->fAllowWatchOnly && (mine & ISMINE_WATCH_SOLVABLE) != ISMINE_NO),
@@ -2826,6 +2878,8 @@ std::map<CTxDestination, CAmount> CWallet::GetAddressBalances()
             if (nDepth < (pcoin->IsFromMe(ISMINE_ALL) ? 0 : 1))
                 continue;
 
+	    int nCoinHeight = pcoin->GetHeightInMainChainOrTipHeight();
+
             for (unsigned int i = 0; i < pcoin->vout.size(); i++)
             {
                 CTxDestination addr;
@@ -2833,6 +2887,10 @@ std::map<CTxDestination, CAmount> CWallet::GetAddressBalances()
                     continue;
                 if(!ExtractDestination(pcoin->vout[i].scriptPubKey, addr))
                     continue;
+
+		// Infinitum:: unexistent output if it has been pruned
+		if (IsOutputPruned(pcoin->vout[i].nValue, nCoinHeight))
+		    continue;
 
                 CAmount n = IsSpent(walletEntry.first, i) ? 0 : pcoin->vout[i].nValue;
 
@@ -3561,6 +3619,24 @@ int CMerkleTx::SetMerkleBranch(const CBlock& block)
         return 0;
 
     return chainActive.Height() - pindex->nHeight + 1;
+}
+
+uint64_t CMerkleTx::GetHeightInMainChainOrTipHeight() const
+{
+    AssertLockHeld(cs_main);
+
+    if (hashUnset())
+      return chainActive.Height();
+
+    // Find the block it claims to be in
+    BlockMap::iterator mi = mapBlockIndex.find(hashBlock);
+    if (mi == mapBlockIndex.end())
+        return chainActive.Height();
+    CBlockIndex* pindex = (*mi).second;
+    if (!pindex || !chainActive.Contains(pindex))
+        return chainActive.Height();
+
+    return pindex->nHeight;
 }
 
 int CMerkleTx::GetDepthInMainChain(const CBlockIndex* &pindexRet) const

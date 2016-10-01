@@ -38,8 +38,11 @@ bool TooManyCyclesBetween(int nOutputHeight, int nInputHeight);
 
 // Check for dust or inactivity pruned outputs that cannot be spent by any one of the 
 //   inputs of a new transaction "tx" to be included in a block at "nHeight" considering 
-//   the Chainstate database "view" of UTXOs.
+//   the Chainstate database "view" of UTXOs (to locate tx in a block height).
 bool IsSpendingPrunedInputs(const CCoinsViewCache &view, const CTransaction &tx, int nHeight, bool &fDustPruned);
 
+// Check whether an output of value nOutputAmount at height nOutputHeight can be spent by
+//   any new transaction to be included in any new block going forward.
+bool IsOutputPruned(const CAmount nOutputAmount, uint64_t nOutputHeight);
 
 #endif // INFINITUM_INFINITUM_H
