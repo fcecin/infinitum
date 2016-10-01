@@ -76,7 +76,14 @@ void CChain::SetTip(CBlockIndex *pindex) {
     //   case this loop doesn't run (i.e. nothing to update)
     for (int nCycle = nStartCycle; nCycle <= nEndCycle; ++nCycle) {
 
-        // Element 0 = ndustvote 0's count; element 1 = ndustvote 1's count etc.
+	// A simple safeguard:
+	// For the first 8 cycles, the vote is 0 (no dust pruning).
+	if (nCycle < 8) {
+	  vMinSpendableOutputValues[nCycle] = 1;
+	  continue;
+	}
+
+	// Element 0 = ndustvote 0's count; element 1 = ndustvote 1's count etc.
 	std::vector<int> vVoteCounts;
 	vVoteCounts.resize(256);
 
@@ -85,6 +92,16 @@ void CChain::SetTip(CBlockIndex *pindex) {
 
 	// Tally votes
 	for (int i = nFirstHeight; i <= nLastHeight; ++i) {
+
+	    // A simple safeguard:
+	    // If the network difficulty is below 268,435,456 (roughly 1-2 petahashes
+	    //   network speed) for ANY block in a cycle, then that cycle's vote for
+	    //   the dust threshold is automatically 0 (no dust pruning).
+	    if (vChain[i]->nBits > 0x190FFFFF) {
+	      vVoteCounts[0] = INFINITUM_CHAIN_CYCLE_BLOCKS;
+	      break;
+	    }
+
 	    int nVote = (vChain[i]->nVersion >> 8) & 0xFF;
 	    ++vVoteCounts[nVote];
 	}
