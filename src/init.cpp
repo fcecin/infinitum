@@ -1388,25 +1388,26 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     // if pruning, unset the service bit and perform the initial blockstore prune
     // after any wallet rescanning has taken place.
     if (fPruneMode) {
-        LogPrintf("Unsetting NODE_NETWORK on prune mode\n");
-        nLocalServices = ServiceFlags(nLocalServices & ~NODE_NETWORK);
+
+        // Infinitum:: We do not turn off NODE_NETWORK for Pruned Mode, since we
+        //  expect the whole network to always run all full nodes in Pruned Mode.
+        //
+        //LogPrintf("Unsetting NODE_NETWORK on prune mode\n");
+        //nLocalServices = ServiceFlags(nLocalServices & ~NODE_NETWORK);
+
         if (!fReindex) {
             uiInterface.InitMessage(_("Pruning blockstore..."));
             PruneAndFlush();
         }
     }
 
-    if (Params().GetConsensus().vDeployments[Consensus::DEPLOYMENT_SEGWIT].nTimeout != 0) {
-        // Only advertize witness capabilities if they have a reasonable start time.
-        // This allows us to have the code merged without a defined softfork, by setting its
-        // end time to 0.
-        // Note that setting NODE_WITNESS is never required: the only downside from not
-        // doing so is that after activation, no upgraded nodes will fetch from you.
-        nLocalServices = ServiceFlags(nLocalServices | NODE_WITNESS);
-        // Only care about others providing witness capabilities if there is a softfork
-        // defined.
-        nRelevantServices = ServiceFlags(nRelevantServices | NODE_WITNESS);
-    }
+    // Infinitum:: enable NODE_WITNESS since ever
+    // Note that setting NODE_WITNESS is never required: the only downside from not
+    // doing so is that after activation, no upgraded nodes will fetch from you.
+    nLocalServices = ServiceFlags(nLocalServices | NODE_WITNESS);
+    // Only care about others providing witness capabilities if there is a softfork
+    // defined.
+    nRelevantServices = ServiceFlags(nRelevantServices | NODE_WITNESS);
 
     // ********************************************************* Step 10: import blocks
 
