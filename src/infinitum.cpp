@@ -18,15 +18,15 @@ int GetCycle(int nHeight)
 
 int NumCyclesBetween(int nOutputHeight, int nInputHeight)
 {
-  assert(nOutputHeight > 0);
-  assert(nInputHeight > 0);
-  assert(nOutputHeight <= nInputHeight);
-  return GetCycle(nInputHeight) - GetCycle(nOutputHeight);
+    assert(nOutputHeight > 0);
+    assert(nInputHeight > 0);
+    assert(nOutputHeight <= nInputHeight);
+    return GetCycle(nInputHeight) - GetCycle(nOutputHeight);
 }
 
 bool TooManyCyclesBetween(int nOutputHeight, int nInputHeight)
 {
-  return NumCyclesBetween(nOutputHeight, nInputHeight) > INFINITUM_TRANSACTION_EXPIRATION_CYCLES;
+    return NumCyclesBetween(nOutputHeight, nInputHeight) > INFINITUM_TRANSACTION_EXPIRATION_CYCLES;
 }
 
 bool IsSpendingPrunedInputs(const CCoinsViewCache &view, const CTransaction &tx, int nHeight, bool &fDustPruned)
@@ -52,7 +52,25 @@ bool IsOutputPruned(const CAmount nOutputAmount, uint64_t nOutputHeight)
     uint64_t nInputHeight = chainActive.Height() + 1; // any new block
     if (TooManyCyclesBetween(nOutputHeight, nInputHeight))
         return true;
-    if (chainActive.GetMinSpendableOutputValue(nOutputHeight, nInputHeight) > nOutputAmount)
+    if (IsOutputPrunedDust(nOutputAmount, nOutputHeight, nInputHeight))
         return true;
     return false;
+}
+
+bool IsOutputPrunedDust(const CAmount nOutputAmount, uint64_t nOutputHeight, uint64_t nInputHeight)
+{
+    return chainActive.GetMinSpendableOutputValue(nOutputHeight, nInputHeight) > nOutputAmount;
+}
+
+int GetLastLockedInCycle(int64_t nChainHeight)
+{
+    int nLLIC = GetCycle(nChainHeight) - 1;
+    if (nChainHeight > 0 && nChainHeight % INFINITUM_CHAIN_CYCLE_BLOCKS != 0)
+        --nLLIC;
+    return nLLIC;
+}
+
+int GetCycleLastBlockHeight(int nCycle)
+{
+    return (nCycle + 1) * INFINITUM_CHAIN_CYCLE_BLOCKS;
 }

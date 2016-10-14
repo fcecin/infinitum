@@ -767,6 +767,8 @@ void InitLogging()
     LogPrintf("Infinitum version %s\n", FormatFullVersion());
 }
 
+bool CheckGarbageCollectChainstateDB();
+
 /** Initialize infinitum.
  *  @pre Parameters should be parsed and config file should be read.
  */
@@ -1409,6 +1411,15 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
     // defined.
     nRelevantServices = ServiceFlags(nRelevantServices | NODE_WITNESS);
 
+    // Infinitum:: Garbage collect the Chainstate DB if it is time to do so.
+    // Don't garbage-collect if we're already going to reindex for whatever reason:
+    //   in that case, the UTXO GC will run the *next* time we run the node, to
+    //   collect all the garbage from the entire history of the blockchain that was
+    //   restored to the chainstate DB by a full reindex.
+    if (!fReindex)
+        if (!CheckGarbageCollectChainstateDB())
+            return false;
+
     // ********************************************************* Step 10: import blocks
 
     if (mapArgs.count("-blocknotify"))
@@ -1473,4 +1484,172 @@ bool AppInit2(boost::thread_group& threadGroup, CScheduler& scheduler)
 #endif
 
     return !fRequestShutdown;
+}
+
+// Returns false on init error
+bool CheckGarbageCollectChainstateDB()
+{
+    // Based on the height of the main chain, we can determined the Last Locked In Cycle (LLIC),
+    //  which is the latest completed cycle (i.e. that is filled full with blocks) that has
+    //  ANOTHER completed cycle as its next cycle.
+    // Example: as we connect the last block of cycle #27, the LLIC advances from 25 to 26.
+    //  If that block is then disconnected, the LLIC then goes back from 26 to 25.
+    // The LLIC tells us how many cycles, since the beginning of time, will NOT change ever with
+    //  extreme likelyhood. The LLIC cycle has an ENTIRE cycle of confirmations ahead of it,
+    //  which makes a "reorg" that involves any block up to all blocks of the LLIC a virtual
+    //  impossibility.
+    // We use the concept of LLIC to delete "inactivity-pruned and dust-pruned" unspent
+    //  transaction outputs (UTXOs) from the Chainstate DB.
+    // In Infinitum, any UTXO that is unspent for a given number of cycles since the block it
+    //  was committed into will be regarded as unspendable going forward by the protocol rules
+    //  (e.g. ConnectBlock()). That is an "inactivity-pruned" UTXO.
+    // Also in Infinitum every cycle has a vote, on every block, on what a "dust UTXO" is.
+    //  When a cycle completes, the node tallies all the votes in all the blocks to determine
+    //  what the network regards as the new amount of INF that constitutes UTXO dust. That
+    //  value applies in such a way that any subsequent blocks immediately following the cycle
+    //  that voted for that dust value cannot spend ANY UTXO from ANY point in the past whose
+    //  value is LOWER than that dust value. And this applies to ALL cycles that that UTXO
+    //  will have to cross from the block it was committed into and into the block that will
+    //  attempt to spend it--ALL cycles crossed in between will apply THEIR vote of what
+    //  constitute dust into "pruning" that UTXO. That is a "dust-pruned" UTXO.
+    // However, note the rules as described have to be mindful of "reorgs." It is possible
+    //  to go back in time and change the outcome of a "dust vote" of a cycle and it is
+    //  possible to go back in time and "refresh" an inactive UTXO back into life by spending
+    //  it before it expires. So we cannot just physically prune the Chainstate DB as soon
+    //  as e.g. a block is connected, and/or a cycle completed.
+    // The LLIC then tells us when a cycle is ready, according to our chosen heuristic, to
+    //  CAUSE the pruning of UTXO from anywhere in the chain, in the Chainstate DB. When the
+    //  LLIC advances to a next cycle, we consider that that cycle will never be involved in
+    //  any future reorgs, and therefore if an UTXO can no longer be spent because it will
+    //  be considered inactive and unspendable in any block following the LLIC cycle or
+    //  because it was rendered unspendable for being prune-dust as a result of the new LLIC
+    //  cycle's dust-value vote and therefore can't be spent in any block following the
+    //  LLIC cycle, then that unspendable UTXO is ready to be physically deleted from the
+    //  Chainstate DB.
+    // Finally, it is worth noting that the only reason we care so much about this is that
+    //  every Infinitum FULL node is designed to run in "Pruned mode", "Pruned" here in the
+    //  Bitcoin Core sense of getting rid of BLOCK DATA (not Chainstate DB data), i.e. the
+    //  every 10-minute (5-minute with INF) blobs of data, the "actual blocks" that the
+    //  network generates. Since we assume every Infinitum node runs in pruned mode, the
+    //  Chainstate DB data becomes vital to keep the node functioning. A massive reorg that
+    //  would span farther than we allow for would require UTXOs that we deleted (pruned)
+    //  from the Chainstate DB to come back, and the only way to do that locally would
+    //  have been to "Reindex" the node, i.e. slog through the entire array of block
+    //  data to reconstruct the Chainstate DB from sratch, but we can't do that because
+    //  we run the node in Pruned Mode all the time. The only real way to rebuild a node
+    //  (or to install a new node, for that matter) in a network where EVERYONE runs in
+    //  Pruned Mode is to copy someone else's Chainstate DB after you install the node
+    //  software locally. Which is exactly what we want and that we're fine with.
+    // And finally, the whole reason we bother with ALL this stuff, is to solve the
+    //  problem of the "ever-growing blockchain data directory." Bitcoin's "Pruned Mode"
+    //  solves the ever-growth of the "block data" directory, and all this stuff we're
+    //  doing here, with the ConnectBlock() etc. rules for  "inactivity-pruning" and
+    //  "dust-pruning" of UTXOs, and the subsequent physical pruning of UTXOs rendered
+    //  unspendable by these rules, is to avoid the ever-growth of the Chainstate DB, which,
+    //  finally and definitively solves the problem (we ignore the ever-growth of block
+    //  headers, which is way too small for even the most neurotic to care).
+
+    LOCK(cs_main);
+
+    // If we have no blocks (other than the genesis, which we ignore and treat as a
+    //   non-block, read-only conceptual defect generally), don't do anything because
+    //   the ccoinsDB cursor crashes on zero entries.
+    int64_t nChainHeight = chainActive.Height();
+    if (nChainHeight <= 0)
+        return true;
+
+    // The LLIC is the largest complete cycle with ANOTHER complete cycle confirming it.
+    // There is nothing to do before the first cycle is locked-in (i.e. the second
+    //   cycle is completed in the main chain)
+    int nLLIC = GetLastLockedInCycle(nChainHeight);
+    if (nLLIC < 0)
+        return true;
+
+    // Last Locked In Height (last block of the LLIC)
+    int64_t nLLIHeight = GetCycleLastBlockHeight(nLLIC);
+
+    int nLLIPC;
+    if (! pcoinsdbview->GetLLIPC(nLLIPC))
+        return InitError(_("Failed to read from the Chainstate DB (nLLIPC)."));
+
+    if (nLLIC < nLLIPC - 1)
+        return InitError(_("Massive reorg detected.\n\nCannot guarantee the Chainstate DB's consistency.\n\nYou must -reindex, re-download or re-install your local copy of the blockchain from a trusted source."));
+
+    // Nothing new to do yet.
+    if (nLLIC <= nLLIPC)
+        return true;
+
+    // Scan the entire Chainstate DB and prune all UTXOs from the transaction
+    //   records and/or entire transaction entries that are dead considering
+    //   the new nLLIC.
+    // This is all here on init.cpp because the instance (pcoinsdbview->) of the
+    //   class (CCoinsViewDB) that can give us access to the CDBWrapper is only
+    //   in scope here at init.cpp. It is easier
+    uiInterface.InitMessage(_("Pruning UTXO database..."));
+    LogPrint("coindb", "Block cycle UTXO GC Starting: Last GC cycle: %i, Current confirmed cycle: %i.\n", nLLIPC, nLLIC);
+
+    CCoinsViewCursor *pcursor = pcoinsdbview->Cursor();
+    CDBWrapper &db = pcoinsdbview->GetDB();
+    CDBBatch batch(db);
+
+    size_t count = 0;
+    size_t changed = 0;
+    static const char DB_COINS = 'c'; // Stolen from txdb.cpp
+
+    while (pcursor->Valid()) {
+        boost::this_thread::interruption_point();
+        uint256 txid;
+        CCoins coins;
+        if (!pcursor->GetKey(txid) || (!pcursor->GetValue(coins)))
+            return InitError(_("Failed to read from the Chainstate DB (UTXO GC)."));
+        pcursor->Next();
+        ++count;
+
+        // do not touch any transactions that are not inside the locked-in height range
+        if (coins.nHeight > nLLIHeight)
+            continue;
+
+        // do we want to nuke the entire transaction because of inactivity?
+        bool fMurder = TooManyCyclesBetween(coins.nHeight, nLLIHeight + 1);
+        bool fChanged = false;
+        if (!fMurder) {
+            // delete all txouts that are unspendable pruned-dust.
+            for (size_t i=0; i<coins.vout.size(); ++i) {
+                CTxOut &txout = coins.vout[i];
+                if (!txout.IsNull() && IsOutputPrunedDust(txout.nValue, coins.nHeight, nLLIHeight + 1)) {
+                    txout.SetNull();
+                    fChanged = true;
+                }
+            }
+            // if the entire transaction has no spendable outputs left then just remove it from the utxo db
+            fMurder = coins.IsPruned();
+        }
+
+        if (fMurder) {
+            batch.Erase(make_pair(DB_COINS, txid));
+        } else if (fChanged) {
+            coins.Cleanup();
+            batch.Write(make_pair(DB_COINS, txid), coins);
+        }
+
+        if (fMurder || fChanged)
+            ++changed;
+    }
+
+    delete pcursor;
+    pcursor = NULL;
+
+    LogPrint("coindb", "Block cycle UTXO GC Finishing: Committing %u changed transactions (out of %u) to Chainstate DB.\n", (unsigned int)changed, (unsigned int)count);
+
+    if (! db.WriteBatch(batch))
+        return InitError(_("Failed to write to the Chainstate DB (UTXO GC)."));
+
+    // If we get to here, we can register that we have done the pruning for
+    //   the given cycle, so we won't attempt it again until the *next* LLIC.
+    // We don't want to do it every time the node boots. Every once the
+    //   wall-clock time of a block cycle is more than sufficient to keep the
+    //   Chainstate DB garbage-collected.
+    pcoinsdbview->SetLLIPC(nLLIC);
+
+    return true;
 }

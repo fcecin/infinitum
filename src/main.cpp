@@ -2177,6 +2177,33 @@ bool DisconnectBlock(const CBlock& block, CValidationState& state, const CBlockI
     if (blockUndo.vtxundo.size() + 1 != block.vtx.size())
         return error("DisconnectBlock(): block and undo data inconsistent");
 
+    // Infinitum:: cannot ever DisconnectBlock() into the region of blocks
+    //   that has been "Locked In Pruned", i.e. garbage-collected for
+    //   dust and inactive UTXOs in the Chainstate DB.
+    // If we don't do this, DisconnectBlock() bombs below where it detects
+    //   inconsistencies between the Chainstate DB and block data.
+    // It is enough to do this as I hope we won't be disconnecting blocks
+    //   into that region, ever, unless some year-sized massive reorg
+    //   happens. In which case all you have to do is regenerate/reseed
+    //   your entire chainstate and/or block databases from a trusted source.
+    // Our decision to prune the chainstate DB of certain old UTXOs we
+    //   decide become unspendable as time passes and the chain grows,
+    //   renders that ever-advancing region entirely unverifiable for integrity
+    //   as far as the preexisting "verify consistency" logics inherited from
+    //   the Bitcoin code apply. PERHAPS we still can do some checks and not
+    //   others, but, for now,  we are just skipping/forbidding anything
+    //   involving consistency checks that ventures in the garbage-collected
+    //   region, i.e. too further into the past -- more than one entire cycle.
+    // The definitive solution for database corruption is fetching another
+    //   copy. Or, keep backups of your own locally-constructed DB as you go.
+    //
+    int nLLIPC;
+    if (! view.GetLLIPC(nLLIPC))
+      return error("DisconnectBlock(): ERROR: Failed to read from the Chainstate DB (nLLIPC).\n");
+    int nLLIPHeight = GetCycleLastBlockHeight(nLLIPC);
+    if (pindex->nHeight <= nLLIPHeight)
+      return error("DisconnectBlock(): ERROR: Cannot disconnect block at height %i as it is equal or earlier than the Last Locked-In Pruned block height of %i (nLLIPC: %i)\n", pindex->nHeight, nLLIPHeight, nLLIPC);
+
     // undo transactions in reverse order
     for (int i = block.vtx.size() - 1; i >= 0; i--) {
         const CTransaction &tx = block.vtx[i];
@@ -4126,6 +4153,19 @@ bool CVerifyDB::VerifyDB(const CChainParams& chainparams, CCoinsView *coinsview,
         nCheckDepth = 1000000000; // suffices until the year 19000
     if (nCheckDepth > chainActive.Height())
         nCheckDepth = chainActive.Height();
+
+    // Infinitum: Don't VerifyDB past the Last Locked-In Pruned Cycle as informed in
+    //   a flag inside the chainstate DB. This is an OK decision in the same vein 
+    //   that aborting once reaching Bitcoin's Block Pruning Mode is also OK.
+    int nLLIPC;
+    if (! coinsview->GetLLIPC(nLLIPC))
+      return error("VerifyDB(): ERROR: Failed to read from the Chainstate DB (nLLIPC).\n");
+    int nMaxDepth = chainActive.Height() - GetCycleLastBlockHeight(nLLIPC) - 1;
+    if (nCheckDepth > nMaxDepth) {
+      LogPrintf("VerifyDB(): Capping check depth from %i blocks to %i blocks due to the chainstate DB's LLIPC flag of %i\n", nCheckDepth, nMaxDepth, nLLIPC);
+      nCheckDepth = nMaxDepth;
+    }
+
     nCheckLevel = std::max(0, std::min(4, nCheckLevel));
     LogPrintf("Verifying last %i blocks at level %i\n", nCheckDepth, nCheckLevel);
     CCoinsViewCache coins(coinsview);

@@ -341,6 +341,9 @@ public:
     //! Get a cursor to iterate over the whole state
     virtual CCoinsViewCursor *Cursor() const;
 
+    // Infinitum:: reading the LLIPC flag (last garbage-collected cycle).
+    virtual bool GetLLIPC(int &nLLIPC) const;
+
     //! As we use CCoinsViews polymorphically, have a virtual destructor
     virtual ~CCoinsView() {}
 };
@@ -360,6 +363,9 @@ public:
     void SetBackend(CCoinsView &viewIn);
     bool BatchWrite(CCoinsMap &mapCoins, const uint256 &hashBlock);
     CCoinsViewCursor *Cursor() const;
+
+    // Infinitum:: reading the LLIPC flag (last garbage-collected cycle).
+    bool GetLLIPC(int &nLLIPC) const;
 };
 
 

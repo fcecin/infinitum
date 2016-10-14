@@ -69,6 +69,15 @@ protected:
 public:
     CCoinsViewDB(size_t nCacheSize, bool fMemory = false, bool fWipe = false);
 
+    // Infinitum:: APIs for reading and writing the last locked-in pruned
+    //  cycle flag: essentially the last time (cycle) we garbage-collected
+    //  the Chainstate DB of inactivity- and dust-pruned UTXOs.
+    //  Also, get the CDBWrapper which is the easiest way to implement
+    //  a batched write for UTXO dust pruning.
+    bool GetLLIPC(int &nLLIPC) const;
+    void SetLLIPC(int nLLIPC);
+    CDBWrapper& GetDB() { return db; }
+
     bool GetCoins(const uint256 &txid, CCoins &coins) const;
     bool HaveCoins(const uint256 &txid) const;
     uint256 GetBestBlock() const;

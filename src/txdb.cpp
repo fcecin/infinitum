@@ -25,10 +25,29 @@ static const char DB_BEST_BLOCK = 'B';
 static const char DB_FLAG = 'F';
 static const char DB_REINDEX_FLAG = 'R';
 static const char DB_LAST_BLOCK = 'l';
-
+// Infinitum:: Last Locked-In Pruned Cycle, used by inactivity-pruned and dust-pruned UTXO
+//   garbage collection for the chainstate DB (CCoinsViewDB).
+static const char DB_LLIPC = 'P';
 
 CCoinsViewDB::CCoinsViewDB(size_t nCacheSize, bool fMemory, bool fWipe) : db(GetDataDir() / "chainstate", nCacheSize, fMemory, fWipe, true) 
 {
+}
+
+bool CCoinsViewDB::GetLLIPC(int &nLLIPC) const
+{
+    if (!db.Exists(DB_LLIPC)) {
+        // This is the smallest value possible for the cycle math, but anything less
+        //  than zero (i.e. both -2 and -1) are NO-OPs (i.e. no block cycles were
+        //  garbage collected yet on the chainstate DB)
+        nLLIPC = -2;
+        return true;
+    }
+    return db.Read(DB_LLIPC, nLLIPC);
+}
+
+void CCoinsViewDB::SetLLIPC(int nLLIPC)
+{
+    db.Write(DB_LLIPC, nLLIPC);
 }
 
 bool CCoinsViewDB::GetCoins(const uint256 &txid, CCoins &coins) const {

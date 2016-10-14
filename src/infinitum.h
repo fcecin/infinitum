@@ -41,8 +41,21 @@ bool TooManyCyclesBetween(int nOutputHeight, int nInputHeight);
 //   the Chainstate database "view" of UTXOs (to locate tx in a block height).
 bool IsSpendingPrunedInputs(const CCoinsViewCache &view, const CTransaction &tx, int nHeight, bool &fDustPruned);
 
-// Check whether an output of value nOutputAmount at height nOutputHeight can be spent by
-//   any new transaction to be included in any new block going forward.
+// Check whether an output of value nOutputAmount at height nOutputHeight cannot be spent by
+//   any new transaction to be included in any new block going forward (dust-prune OR
+//   inactivity-prune)
 bool IsOutputPruned(const CAmount nOutputAmount, uint64_t nOutputHeight);
+
+// Check if an output of value nOutputAmount at height nOutputHeight cannot be spent by
+//   any new transaction to be included in any new block going forward BECAUSE of it
+//   being pruned by the dust threshold voted by miners at end of block chain cycles.
+bool IsOutputPrunedDust(const CAmount nOutputAmount, uint64_t nOutputHeight, uint64_t nInputHeight);
+
+// Get the number of the last "confirmed" cycle (the cycle with at least another entire
+//   cycle ahead of it).
+int GetLastLockedInCycle(int64_t nChainHeight);
+
+// Get the height of the last block in a given cycle
+int GetCycleLastBlockHeight(int nCycle);
 
 #endif // INFINITUM_INFINITUM_H
