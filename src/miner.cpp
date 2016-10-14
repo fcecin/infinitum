@@ -153,7 +153,6 @@ CBlockTemplate* BlockAssembler::CreateNewBlock(const CScript& scriptPubKeyIn)
     if (chainparams.MineBlocksOnDemand())
         pblock->nVersion = GetArg("-blockversion", pblock->nVersion);
 
-    // Infinitum:: FIXME/TODO: use the higher 16 bits of nVersion for a timestamp extension
     // Infinitum:: append the prune-dust vote option
     pblock->nVersion &= 0xFF;
     pblock->nVersion |= (nPruneDustVote << 8);
