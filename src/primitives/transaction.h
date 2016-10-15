@@ -354,8 +354,12 @@ private:
     const uint256 hash;
 
 public:
+    // Infinitum:: We start the network with Bitcoin "version 2" transactions from
+    //    the get-go. "version 1" never existed in our network (with the sole
+    //    possible exception being whatever is stuffed into the genesis block).
+    //
     // Default transaction version.
-    static const int32_t CURRENT_VERSION=1;
+    static const int32_t CURRENT_VERSION=2;
 
     // Changing the default transaction version requires a two step process: first
     // adapting relay policy by bumping MAX_STANDARD_VERSION, and then later date
